@@ -1,9 +1,13 @@
 import { PrismaClient, DayOfWeek } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("🌱 Starting database seed...");
+
+  const seedPassword = process.env.SEED_HOST_PASSWORD || "SlotbookDev2026!";
+  const passwordHash = await bcrypt.hash(seedPassword, 10);
 
   // 1. Seed demo host in Asia/Kolkata
   const host = await prisma.host.upsert({
@@ -12,12 +16,14 @@ async function main() {
       name: "Alex Sharma",
       slug: "alex-sharma",
       timezone: "Asia/Kolkata",
+      passwordHash,
     },
     create: {
       name: "Alex Sharma",
       email: "alex.slotbook@example.com",
       slug: "alex-sharma",
       timezone: "Asia/Kolkata",
+      passwordHash,
     },
   });
   console.log(`👤 Seeded Host: ${host.name} (${host.email}) [${host.timezone}]`);
