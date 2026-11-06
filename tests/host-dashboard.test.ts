@@ -36,7 +36,7 @@ describe("Phase 4: Host Dashboard & Scheduling Management", () => {
   let secondaryEventId: string;
   let meeting30Id: string;
 
-  const testPassword = "HostSecurePass2026!";
+  const testPassword = "SlotbookDev2026!";
 
   before(async () => {
     // 1. Ensure primary host has passwordHash

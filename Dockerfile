@@ -26,6 +26,10 @@ RUN npm ci
 FROM base AS builder
 WORKDIR /app
 
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/slotbook?schema=public"
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
@@ -33,8 +37,6 @@ COPY . .
 RUN npx prisma generate
 
 # Build Next.js production application
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
 RUN npm run build
 
 # ==========================================

@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: slotbook_dev_password
       POSTGRES_DB: slotbook
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - slotbook_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,6 +16,54 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: slotbook-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: "postgresql://slotbook:slotbook_dev_password@db:5432/slotbook?schema=public"
+      SESSION_SECRET: "slotbook_docker_compose_session_secret_min_32_characters"
+      APP_BASE_URL: "http://localhost:3000"
+      PORT: 3000
+      NODE_ENV: "production"
+      EMAIL_PROVIDER: "console"
+      ALLOW_PRODUCTION_SEED: "true"
+      ALLOW_DEFAULT_DEMO_PASSWORD: "true"
+      SEED_HOST_PASSWORD: "SlotbookDev2026!"
+    command: sh -c "npx prisma migrate deploy && npx prisma db seed && npm run start"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: slotbook-worker
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://slotbook:slotbook_dev_password@db:5432/slotbook?schema=public"
+      SESSION_SECRET: "slotbook_docker_compose_session_secret_min_32_characters"
+      APP_BASE_URL: "http://localhost:3000"
+      NODE_ENV: "production"
+      EMAIL_PROVIDER: "console"
+      NOTIFICATION_POLL_INTERVAL_MS: 5000
+      NOTIFICATION_LOCK_TIMEOUT_MS: 300000
+    command: npm run worker
 
 volumes:
   slotbook_postgres_data:

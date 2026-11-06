@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { GET as healthCheckRoute } from "../src/app/api/health/route";
+import { GET as rootHealthRoute } from "../src/app/health/route";
+import { prisma } from "../src/lib/prisma";
 import { getEnvConfig } from "../src/lib/config/env";
 import { loginRateLimiter } from "../src/lib/auth/rate-limiter";
 import { POST as loginRoute } from "../src/app/api/auth/login/route";
@@ -25,6 +27,34 @@ describe("Phase 6: Production Readiness & Deployment Audits", () => {
       // Verify no-cache header
       const cacheControl = res.headers.get("Cache-Control");
       assert.ok(cacheControl?.includes("no-store"));
+    });
+
+    it("GET /health root alias returns 200 OK matching /api/health", async () => {
+      const res = await rootHealthRoute();
+      assert.equal(res.status, 200);
+
+      const body = await res.json();
+      assert.equal(body.status, "ok");
+      assert.equal(body.database?.status, "connected");
+    });
+
+    it("GET /api/health returns 503 degraded when database query fails", async () => {
+      const originalQueryRaw = prisma.$queryRaw;
+      try {
+        // Mock a database outage
+        (prisma as unknown as { $queryRaw: () => Promise<unknown> }).$queryRaw = async () => {
+          throw new Error("Connection terminated unexpectedly");
+        };
+
+        const res = await healthCheckRoute();
+        assert.equal(res.status, 503);
+
+        const body = await res.json();
+        assert.equal(body.status, "degraded");
+        assert.equal(body.database?.status, "disconnected");
+      } finally {
+        prisma.$queryRaw = originalQueryRaw;
+      }
     });
   });
 

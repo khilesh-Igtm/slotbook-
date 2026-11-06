@@ -4,6 +4,10 @@
 import "dotenv/config";
 import { defineConfig, env } from "prisma/config";
 
+const databaseUrl = process.env.DATABASE_URL
+  ? env("DATABASE_URL")
+  : "postgresql://placeholder:placeholder@localhost:5432/slotbook?schema=public";
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
@@ -12,6 +16,6 @@ export default defineConfig({
   },
   engine: "classic",
   datasource: {
-    url: env("DATABASE_URL"),
+    url: databaseUrl,
   },
 });

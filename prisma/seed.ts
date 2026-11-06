@@ -13,10 +13,11 @@ async function main() {
 
   if (
     process.env.NODE_ENV === "production" &&
+    process.env.ALLOW_DEFAULT_DEMO_PASSWORD !== "true" &&
     (!process.env.SEED_HOST_PASSWORD || process.env.SEED_HOST_PASSWORD === "SlotbookDev2026!")
   ) {
     throw new Error(
-      "Refusing to seed production with default demo password. Please supply a secure SEED_HOST_PASSWORD."
+      "Refusing to seed production with default demo password. Please supply a secure SEED_HOST_PASSWORD or set ALLOW_DEFAULT_DEMO_PASSWORD=true."
     );
   }
 
