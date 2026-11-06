@@ -27,7 +27,11 @@ export async function GET(
       date: parsedQuery.data.date,
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+      },
+    });
   } catch (error: unknown) {
     const { status, body } = formatErrorResponse(error);
     return NextResponse.json(body, { status });

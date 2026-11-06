@@ -6,11 +6,13 @@ import {
   processNotification,
 } from "@/lib/notifications/notification.service";
 import { prisma } from "@/lib/prisma";
+import { getEnvConfig } from "@/lib/config/env";
 
-const POLL_INTERVAL_MS = parseInt(process.env.NOTIFICATION_POLL_INTERVAL_MS || "5000", 10);
-const LOCK_TIMEOUT_MS = parseInt(process.env.NOTIFICATION_LOCK_TIMEOUT_MS || "300000", 10);
+const env = getEnvConfig();
+const POLL_INTERVAL_MS = env.NOTIFICATION_POLL_INTERVAL_MS;
+const LOCK_TIMEOUT_MS = env.NOTIFICATION_LOCK_TIMEOUT_MS;
 const BATCH_SIZE = 10;
-const EMAIL_PROVIDER = process.env.EMAIL_PROVIDER || "console";
+const EMAIL_PROVIDER = env.EMAIL_PROVIDER;
 
 let isRunning = true;
 
@@ -22,11 +24,17 @@ async function runWorkerLoop() {
   console.log("==================================================");
   console.log("⚡ Slotbook Notification Background Worker");
   console.log("==================================================");
+  console.log(`Environment:     ${env.NODE_ENV}`);
   console.log(`Provider:        ${EMAIL_PROVIDER}`);
   console.log(`Poll Interval:   ${POLL_INTERVAL_MS}ms`);
   console.log(`Batch Size:      ${BATCH_SIZE}`);
   console.log(`Lock Lease:      ${LOCK_TIMEOUT_MS}ms`);
   console.log(`Process PID:     ${process.pid}`);
+
+  if (env.NODE_ENV === "production" && EMAIL_PROVIDER === "console") {
+    console.warn("⚠️  [NOTICE] EMAIL_PROVIDER is 'console' in production. Emails will be logged locally and not sent via SMTP/API.");
+  }
+
   console.log("Worker listening for due notifications...\n");
 
   while (isRunning) {

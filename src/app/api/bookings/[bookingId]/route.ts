@@ -9,7 +9,14 @@ export async function GET(
   try {
     const { bookingId } = await params;
     const booking = await getBookingById(bookingId);
-    return NextResponse.json({ booking });
+    return NextResponse.json(
+      { booking },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error: unknown) {
     const { status, body } = formatErrorResponse(error);
     return NextResponse.json(body, { status });

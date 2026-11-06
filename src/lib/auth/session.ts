@@ -1,13 +1,14 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { UnauthorizedError } from "@/lib/errors";
+import { getEnvConfig } from "@/lib/config/env";
 
 const SESSION_COOKIE_NAME = "slotbook_session";
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ||
-  "slotbook_default_session_secret_min_32_chars_2026!";
 
-const encodedKey = new TextEncoder().encode(SESSION_SECRET);
+function getEncodedKey(): Uint8Array {
+  const secret = getEnvConfig().resolvedSessionSecret;
+  return new TextEncoder().encode(secret);
+}
 
 export interface HostSessionPayload {
   hostId: string;
@@ -26,7 +27,7 @@ export async function encryptSession(payload: HostSessionPayload): Promise<strin
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(encodedKey);
+    .sign(getEncodedKey());
 }
 
 /**
@@ -37,7 +38,7 @@ export async function decryptSession(
 ): Promise<HostSessionPayload | null> {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, encodedKey, {
+    const { payload } = await jwtVerify(token, getEncodedKey(), {
       algorithms: ["HS256"],
     });
     return payload as unknown as HostSessionPayload;

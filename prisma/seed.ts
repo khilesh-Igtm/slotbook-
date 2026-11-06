@@ -4,6 +4,22 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
+  // Production seed safety guard
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "true") {
+    console.warn("⚠️  [SAFETY NOTICE] Skipping automatic demo seed in production environment.");
+    console.warn("   To run seed in production, set ALLOW_PRODUCTION_SEED=true and supply a secure SEED_HOST_PASSWORD.");
+    return;
+  }
+
+  if (
+    process.env.NODE_ENV === "production" &&
+    (!process.env.SEED_HOST_PASSWORD || process.env.SEED_HOST_PASSWORD === "SlotbookDev2026!")
+  ) {
+    throw new Error(
+      "Refusing to seed production with default demo password. Please supply a secure SEED_HOST_PASSWORD."
+    );
+  }
+
   console.log("🌱 Starting database seed...");
 
   const seedPassword = process.env.SEED_HOST_PASSWORD || "SlotbookDev2026!";

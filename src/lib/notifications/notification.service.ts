@@ -273,14 +273,21 @@ export async function processNotification(notificationId: string): Promise<{
     const rendered = renderNotificationEmail(notification.type, payload);
     const provider = getEmailProvider();
 
-    // Call provider with notification ID as idempotency key
-    const sendResult = await provider.sendEmail({
+    // Call provider with notification ID as idempotency key and strict 25s network timeout
+    const sendPromise = provider.sendEmail({
       to: recipientEmail,
       subject: rendered.subject,
       html: rendered.html,
       text: rendered.text,
       idempotencyKey: notification.id,
     });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => reject(new Error("Email provider network request timed out after 25s")), 25000);
+      if (typeof timer.unref === "function") timer.unref();
+    });
+
+    const sendResult = await Promise.race([sendPromise, timeoutPromise]);
 
     // Mark as SENT only after provider confirms acceptance
     const now = new Date();
