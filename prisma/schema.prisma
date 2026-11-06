@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,4 +5,148 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum NotificationType {
+  CONFIRMATION
+  REMINDER
+  CANCELLATION
+}
+
+enum NotificationStatus {
+  PENDING
+  SCHEDULED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model Host {
+  id             String          @id @default(uuid())
+  name           String
+  email          String          @unique
+  timezone       String          // IANA timezone string e.g. "Asia/Kolkata"
+  createdAt      DateTime        @default(now()) @db.Timestamptz
+  updatedAt      DateTime        @updatedAt @db.Timestamptz
+
+  eventTypes     EventType[]
+  availabilities Availability[]
+  dateOverrides  DateOverride[]
+  bookings       Booking[]
+}
+
+model EventType {
+  id           String    @id @default(uuid())
+  hostId       String
+  host         Host      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  title        String
+  slug         String
+  description  String?
+  duration     Int       // Duration in minutes
+  bufferBefore Int       @default(0)
+  bufferAfter  Int       @default(0)
+  location     String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @db.Timestamptz
+
+  bookings     Booking[]
+
+  @@unique([hostId, slug])
+  @@index([hostId])
+}
+
+model Availability {
+  id        String    @id @default(uuid())
+  hostId    String
+  host      Host      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  dayOfWeek DayOfWeek
+  startTime DateTime  @db.Time
+  endTime   DateTime  @db.Time
+  createdAt DateTime  @default(now()) @db.Timestamptz
+  updatedAt DateTime  @updatedAt @db.Timestamptz
+
+  @@unique([hostId, dayOfWeek, startTime, endTime])
+  @@index([hostId, dayOfWeek])
+}
+
+model DateOverride {
+  id            String    @id @default(uuid())
+  hostId        String
+  host          Host      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  date          DateTime  @db.Date
+  startTime     DateTime? @db.Time
+  endTime       DateTime? @db.Time
+  isUnavailable Boolean   @default(false)
+  createdAt     DateTime  @default(now()) @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @db.Timestamptz
+
+  @@index([hostId, date])
+}
+
+model Booking {
+  id                 String             @id @default(uuid())
+  hostId             String
+  host               Host               @relation(fields: [hostId], references: [id], onDelete: Restrict)
+  eventTypeId        String
+  eventType          EventType          @relation(fields: [eventTypeId], references: [id], onDelete: Restrict)
+  guestName          String
+  guestEmail         String
+  startAt            DateTime           @db.Timestamptz
+  endAt              DateTime           @db.Timestamptz
+  status             BookingStatus      @default(CONFIRMED)
+  cancellationReason String?
+  createdAt          DateTime           @default(now()) @db.Timestamptz
+  updatedAt          DateTime           @updatedAt @db.Timestamptz
+
+  notifications      Notification[]
+  idempotencyKeys    IdempotencyKey[]
+
+  @@index([hostId, startAt])
+  @@index([eventTypeId, startAt])
+  @@index([status])
+  @@index([guestEmail])
+}
+
+model IdempotencyKey {
+  id        String    @id @default(uuid())
+  key       String    @unique
+  bookingId String?
+  booking   Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  expiresAt DateTime  @db.Timestamptz
+  createdAt DateTime  @default(now()) @db.Timestamptz
+
+  @@index([expiresAt])
+}
+
+model Notification {
+  id          String             @id @default(uuid())
+  bookingId   String
+  booking     Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  status      NotificationStatus @default(PENDING)
+  scheduledAt DateTime           @db.Timestamptz
+  sentAt      DateTime?          @db.Timestamptz
+  createdAt   DateTime           @default(now()) @db.Timestamptz
+  updatedAt   DateTime           @updatedAt @db.Timestamptz
+
+  @@index([bookingId])
+  @@index([status, scheduledAt])
 }
