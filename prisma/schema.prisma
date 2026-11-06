@@ -111,8 +111,11 @@ model Booking {
   guestEmail         String
   startAt            DateTime           @db.Timestamptz
   endAt              DateTime           @db.Timestamptz
+  reservedStartAt    DateTime           @default(now()) @db.Timestamptz
+  reservedEndAt      DateTime           @default(now()) @db.Timestamptz
   status             BookingStatus      @default(CONFIRMED)
   cancellationReason String?
+  cancellationKey    String             @unique @default(uuid())
   createdAt          DateTime           @default(now()) @db.Timestamptz
   updatedAt          DateTime           @updatedAt @db.Timestamptz
 
@@ -120,18 +123,23 @@ model Booking {
   idempotencyKeys    IdempotencyKey[]
 
   @@index([hostId, startAt])
+  @@index([hostId, reservedStartAt, reservedEndAt])
   @@index([eventTypeId, startAt])
   @@index([status])
   @@index([guestEmail])
+  @@index([cancellationKey])
 }
 
 model IdempotencyKey {
-  id        String    @id @default(uuid())
-  key       String    @unique
-  bookingId String?
-  booking   Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-  expiresAt DateTime  @db.Timestamptz
-  createdAt DateTime  @default(now()) @db.Timestamptz
+  id           String    @id @default(uuid())
+  key          String    @unique
+  requestHash  String?
+  responseBody String?
+  statusCode   Int?
+  bookingId    String?
+  booking      Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  expiresAt    DateTime  @db.Timestamptz
+  createdAt    DateTime  @default(now()) @db.Timestamptz
 
   @@index([expiresAt])
 }
