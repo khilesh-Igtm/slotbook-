@@ -28,6 +28,7 @@ describe("PostgreSQL Concurrency & GiST Exclusion Integration", () => {
       data: {
         name: "Second Host",
         email: "second-host@example.com",
+        slug: "second-host",
         timezone: "Asia/Kolkata",
       },
     });

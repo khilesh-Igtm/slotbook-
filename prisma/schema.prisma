@@ -42,6 +42,7 @@ model Host {
   id             String          @id @default(uuid())
   name           String
   email          String          @unique
+  slug           String          @unique
   timezone       String          // IANA timezone string e.g. "Asia/Kolkata"
   createdAt      DateTime        @default(now()) @db.Timestamptz
   updatedAt      DateTime        @updatedAt @db.Timestamptz

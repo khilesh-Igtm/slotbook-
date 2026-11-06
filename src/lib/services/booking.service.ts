@@ -24,21 +24,25 @@ export interface BookingResponse {
   reservedEndAt: string;
   status: BookingStatus;
   cancellationKey: string;
+  cancellationReason?: string | null;
   createdAt: string;
   updatedAt: string;
   host: {
     id: string;
     name: string;
     email: string;
+    slug: string;
     timezone: string;
   };
   eventType: {
     id: string;
     title: string;
     slug: string;
+    description?: string | null;
     duration: number;
     bufferBefore: number;
     bufferAfter: number;
+    location?: string | null;
   };
 }
 
@@ -152,15 +156,17 @@ export async function createBooking(
             status: BookingStatus.CONFIRMED,
           },
           include: {
-            host: { select: { id: true, name: true, email: true, timezone: true } },
+            host: { select: { id: true, name: true, email: true, slug: true, timezone: true } },
             eventType: {
               select: {
                 id: true,
                 title: true,
                 slug: true,
+                description: true,
                 duration: true,
                 bufferBefore: true,
                 bufferAfter: true,
+                location: true,
               },
             },
           },
@@ -200,6 +206,7 @@ export async function createBooking(
           reservedEndAt: DateTime.fromJSDate(createdBooking.reservedEndAt, { zone: "utc" }).toISO()!,
           status: createdBooking.status,
           cancellationKey: createdBooking.cancellationKey,
+          cancellationReason: createdBooking.cancellationReason,
           createdAt: DateTime.fromJSDate(createdBooking.createdAt, { zone: "utc" }).toISO()!,
           updatedAt: DateTime.fromJSDate(createdBooking.updatedAt, { zone: "utc" }).toISO()!,
           host: createdBooking.host,
@@ -255,22 +262,26 @@ export async function createBooking(
   }
 }
 
+export type PublicBookingResponse = Omit<BookingResponse, "cancellationKey">;
+
 /**
- * Retrieves a booking by ID.
+ * Retrieves a public booking by ID (sensitive fields such as cancellationKey are omitted).
  */
-export async function getBookingById(bookingId: string): Promise<BookingResponse> {
+export async function getBookingById(bookingId: string): Promise<PublicBookingResponse> {
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
     include: {
-      host: { select: { id: true, name: true, email: true, timezone: true } },
+      host: { select: { id: true, name: true, email: true, slug: true, timezone: true } },
       eventType: {
         select: {
           id: true,
           title: true,
           slug: true,
+          description: true,
           duration: true,
           bufferBefore: true,
           bufferAfter: true,
+          location: true,
         },
       },
     },
@@ -291,7 +302,7 @@ export async function getBookingById(bookingId: string): Promise<BookingResponse
     reservedStartAt: DateTime.fromJSDate(booking.reservedStartAt, { zone: "utc" }).toISO()!,
     reservedEndAt: DateTime.fromJSDate(booking.reservedEndAt, { zone: "utc" }).toISO()!,
     status: booking.status,
-    cancellationKey: booking.cancellationKey,
+    cancellationReason: booking.cancellationReason,
     createdAt: DateTime.fromJSDate(booking.createdAt, { zone: "utc" }).toISO()!,
     updatedAt: DateTime.fromJSDate(booking.updatedAt, { zone: "utc" }).toISO()!,
     host: booking.host,

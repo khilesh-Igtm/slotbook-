@@ -98,6 +98,7 @@ describe("API Routes Integration", () => {
     assert.equal(getRes.status, 200);
     const getData = await getRes.json();
     assert.equal(getData.booking.id, bookingId);
+    assert.equal(getData.booking.cancellationKey, undefined, "Public GET endpoint must not expose cancellationKey");
 
     // POST /api/bookings/[bookingId]/cancel
     const cancelReq = new NextRequest(`http://localhost:3000/api/bookings/${bookingId}/cancel`, {

@@ -186,6 +186,7 @@ describe("Availability Engine & Slot Generation", () => {
       data: {
         name: "DST Host",
         email: "dst-host@example.com",
+        slug: "dst-host",
         timezone: "America/New_York",
       },
     });

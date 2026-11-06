@@ -10,11 +10,13 @@ async function main() {
     where: { email: "alex.slotbook@example.com" },
     update: {
       name: "Alex Sharma",
+      slug: "alex-sharma",
       timezone: "Asia/Kolkata",
     },
     create: {
       name: "Alex Sharma",
       email: "alex.slotbook@example.com",
+      slug: "alex-sharma",
       timezone: "Asia/Kolkata",
     },
   });

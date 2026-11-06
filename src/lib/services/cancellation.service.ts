@@ -23,15 +23,17 @@ export async function cancelBooking(
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
     include: {
-      host: { select: { id: true, name: true, email: true, timezone: true } },
+      host: { select: { id: true, name: true, email: true, slug: true, timezone: true } },
       eventType: {
         select: {
           id: true,
           title: true,
           slug: true,
+          description: true,
           duration: true,
           bufferBefore: true,
           bufferAfter: true,
+          location: true,
         },
       },
     },
@@ -65,15 +67,17 @@ export async function cancelBooking(
         cancellationReason: input.reason?.trim() || "Cancelled by guest",
       },
       include: {
-        host: { select: { id: true, name: true, email: true, timezone: true } },
+        host: { select: { id: true, name: true, email: true, slug: true, timezone: true } },
         eventType: {
           select: {
             id: true,
             title: true,
             slug: true,
+            description: true,
             duration: true,
             bufferBefore: true,
             bufferAfter: true,
+            location: true,
           },
         },
       },
@@ -116,6 +120,7 @@ export async function cancelBooking(
     reservedEndAt: DateTime.fromJSDate(updatedBooking.reservedEndAt, { zone: "utc" }).toISO()!,
     status: updatedBooking.status,
     cancellationKey: updatedBooking.cancellationKey,
+    cancellationReason: updatedBooking.cancellationReason,
     createdAt: DateTime.fromJSDate(updatedBooking.createdAt, { zone: "utc" }).toISO()!,
     updatedAt: DateTime.fromJSDate(updatedBooking.updatedAt, { zone: "utc" }).toISO()!,
     host: updatedBooking.host,

@@ -65,6 +65,59 @@ export async function getHostAndEventType(hostId: string, eventTypeId: string) {
 }
 
 /**
+ * Loads Host by slug with active event types.
+ */
+export async function getHostBySlug(slug: string) {
+  const host = await prisma.host.findUnique({
+    where: { slug },
+    include: {
+      eventTypes: {
+        where: { isActive: true },
+        orderBy: { duration: "asc" },
+      },
+    },
+  });
+
+  if (!host) {
+    throw new NotFoundError(`Host with slug '${slug}' not found.`);
+  }
+
+  return host;
+}
+
+/**
+ * Loads Host and EventType by their respective slugs.
+ */
+export async function getHostAndEventTypeBySlug(hostSlug: string, eventSlug: string) {
+  const host = await prisma.host.findUnique({
+    where: { slug: hostSlug },
+  });
+
+  if (!host) {
+    throw new NotFoundError(`Host with slug '${hostSlug}' not found.`);
+  }
+
+  const eventType = await prisma.eventType.findUnique({
+    where: {
+      hostId_slug: {
+        hostId: host.id,
+        slug: eventSlug,
+      },
+    },
+  });
+
+  if (!eventType) {
+    throw new NotFoundError(`EventType with slug '${eventSlug}' not found for host '${hostSlug}'.`);
+  }
+
+  if (!eventType.isActive) {
+    throw new ValidationError(`EventType '${eventType.title}' is currently inactive.`);
+  }
+
+  return { host, eventType };
+}
+
+/**
  * Resolves the effective working windows for a host on a specific date.
  * Date overrides take complete precedence over weekly availability.
  */
