@@ -1,7 +1,8 @@
 import { DateTime } from "luxon";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, NotificationStatus, NotificationType } from "@prisma/client";
-import { NotFoundError, UnauthorizedError, InvalidStateTransitionError } from "@/lib/errors";
+import { NotFoundError, UnauthorizedError, InvalidStateTransitionError, ValidationError } from "@/lib/errors";
+import { buildNotificationPayload } from "@/lib/notifications/notification.service";
 
 export interface ListBookingsParams {
   hostId: string;
@@ -144,8 +145,13 @@ export async function getBookingDetailsForHost(
           id: true,
           type: true,
           status: true,
+          recipientEmail: true,
+          recipientType: true,
           scheduledAt: true,
           sentAt: true,
+          attemptCount: true,
+          lastError: true,
+          providerMessageId: true,
         },
         orderBy: { createdAt: "desc" },
       },
@@ -184,8 +190,13 @@ export async function getBookingDetailsForHost(
       id: n.id,
       type: n.type,
       status: n.status,
+      recipientEmail: n.recipientEmail || booking.guestEmail,
+      recipientType: n.recipientType,
       scheduledAt: DateTime.fromJSDate(n.scheduledAt, { zone: hostTimezone }).toFormat("MMM d, HH:mm"),
       sentAt: n.sentAt ? DateTime.fromJSDate(n.sentAt, { zone: hostTimezone }).toFormat("MMM d, HH:mm") : null,
+      attemptCount: n.attemptCount,
+      lastError: n.lastError,
+      providerMessageId: n.providerMessageId,
     })),
   };
 }
@@ -226,29 +237,63 @@ export async function cancelBookingAsHost(
         cancellationReason: reason?.trim() || "Cancelled by host",
       },
       include: {
-        eventType: { select: { title: true } },
+        host: { select: { id: true, name: true, email: true, slug: true, timezone: true } },
+        eventType: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            description: true,
+            duration: true,
+            bufferBefore: true,
+            bufferAfter: true,
+            location: true,
+          },
+        },
       },
     });
 
-    // Cancel any scheduled reminder notifications
+    // Cancel any pending or scheduled reminder notifications
     await tx.notification.updateMany({
       where: {
         bookingId,
-        status: NotificationStatus.SCHEDULED,
+        type: NotificationType.REMINDER,
+        status: { in: [NotificationStatus.PENDING, NotificationStatus.SCHEDULED] },
       },
       data: {
         status: NotificationStatus.CANCELLED,
       },
     });
 
-    // Create host cancellation notification record
+    // Create host cancellation notification record (Status: PENDING, processed by worker)
+    const payload = buildNotificationPayload({
+      bookingId: updated.id,
+      guestName: updated.guestName,
+      guestEmail: updated.guestEmail,
+      hostName: updated.host.name,
+      hostEmail: updated.host.email,
+      hostSlug: updated.host.slug,
+      hostTimezone: updated.host.timezone,
+      eventTitle: updated.eventType.title,
+      eventSlug: updated.eventType.slug,
+      duration: updated.eventType.duration,
+      location: updated.eventType.location,
+      startAt: updated.startAt,
+      endAt: updated.endAt,
+      cancellationReason: updated.cancellationReason,
+      cancelledBy: "host",
+    });
+
     await tx.notification.create({
       data: {
         bookingId,
         type: NotificationType.CANCELLATION,
-        status: NotificationStatus.SENT,
+        status: NotificationStatus.PENDING,
+        recipientEmail: updated.guestEmail,
+        recipientType: "GUEST",
+        subject: `Cancelled: ${updated.eventType.title} with ${updated.host.name}`,
+        payload: payload as object,
         scheduledAt: now,
-        sentAt: now,
       },
     });
 
@@ -263,6 +308,65 @@ export async function cancelBookingAsHost(
       status: updatedBooking.status,
       cancellationReason: updatedBooking.cancellationReason,
       updatedAt: updatedBooking.updatedAt.toISOString(),
+    },
+  };
+}
+
+/**
+ * Allows host to retry a failed notification job.
+ * Enforces ownership and validates that only FAILED notifications can be retried.
+ */
+export async function retryNotificationAsHost(
+  hostId: string,
+  bookingId: string,
+  notificationId: string
+) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+  });
+
+  if (!booking) {
+    throw new NotFoundError(`Booking with id '${bookingId}' not found.`);
+  }
+
+  if (booking.hostId !== hostId) {
+    throw new UnauthorizedError("You do not have permission to retry notifications for this booking.");
+  }
+
+  const notification = await prisma.notification.findUnique({
+    where: { id: notificationId },
+  });
+
+  if (!notification || notification.bookingId !== bookingId) {
+    throw new NotFoundError(`Notification with id '${notificationId}' not found on this booking.`);
+  }
+
+  if (notification.status !== NotificationStatus.FAILED) {
+    throw new ValidationError(
+      `Only notifications in FAILED status can be retried (current status: ${notification.status}).`
+    );
+  }
+
+  const updated = await prisma.notification.update({
+    where: { id: notificationId },
+    data: {
+      status: NotificationStatus.PENDING,
+      attemptCount: 0,
+      nextAttemptAt: null,
+      lastError: null,
+      scheduledAt: new Date(),
+      lockedAt: null,
+    },
+  });
+
+  return {
+    success: true,
+    message: "Notification reset to PENDING and scheduled for immediate processing.",
+    notification: {
+      id: updated.id,
+      status: updated.status,
+      attemptCount: updated.attemptCount,
+      scheduledAt: updated.scheduledAt.toISOString(),
     },
   };
 }

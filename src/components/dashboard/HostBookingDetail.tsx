@@ -41,8 +41,13 @@ export interface HostBookingDetailProps {
       id: string;
       type: NotificationType;
       status: NotificationStatus;
+      recipientEmail?: string;
+      recipientType?: string;
       scheduledAt: string;
       sentAt: string | null;
+      attemptCount?: number;
+      lastError?: string | null;
+      providerMessageId?: string | null;
     }>;
   };
   hostTimezone: string;
@@ -56,10 +61,43 @@ export function HostBookingDetail({
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const isCancelled = booking.status === "CANCELLED";
+
+  const handleRetryNotification = async (notificationId: string) => {
+    setRetryingId(notificationId);
+    setErrorMessage(null);
+
+    try {
+      const res = await fetch(
+        `/api/dashboard/bookings/${booking.id}/notifications/${notificationId}/retry`,
+        { method: "POST" }
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error?.message || "Failed to retry notification.");
+      }
+
+      setBooking((prev) => ({
+        ...prev,
+        notifications: prev.notifications.map((n) =>
+          n.id === notificationId
+            ? { ...n, status: "PENDING" as NotificationStatus, lastError: null, attemptCount: 0 }
+            : n
+        ),
+      }));
+
+      setSuccessMessage("Notification queued for immediate retry.");
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "Failed to retry notification.");
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   const handleCancelBooking = async () => {
     setIsCancelling(true);
@@ -231,39 +269,79 @@ export function HostBookingDetail({
 
           {/* Notifications Timeline */}
           <div className="pt-4 border-t border-slate-100 space-y-3">
-            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-              Notification Events ({booking.notifications.length})
+            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+              <span>Notification Events ({booking.notifications.length})</span>
+              <span className="text-[10px] font-normal text-slate-400">Database-backed asynchronous queue</span>
             </div>
 
             {booking.notifications.length === 0 ? (
               <p className="text-xs text-slate-400 italic">No notifications generated.</p>
             ) : (
-              <div className="space-y-2">
-                {booking.notifications.map((n) => (
-                  <div
-                    key={n.id}
-                    className="flex items-center justify-between text-xs bg-slate-50 p-3 rounded-xl border border-slate-100"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-800">{n.type}</span>
-                      <span className="text-[11px] text-slate-400">
-                        Scheduled: {n.scheduledAt}
-                      </span>
-                    </div>
+              <div className="space-y-2.5">
+                {booking.notifications.map((n) => {
+                  const isFailed = n.status === "FAILED";
 
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        n.status === "SENT"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : n.status === "SCHEDULED"
-                          ? "bg-indigo-50 text-indigo-700"
-                          : "bg-slate-200 text-slate-600"
-                      }`}
+                  let badgeStyle = "bg-slate-100 text-slate-600 border-slate-200";
+                  if (n.status === "SENT") badgeStyle = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                  if (n.status === "SCHEDULED") badgeStyle = "bg-blue-50 text-blue-700 border-blue-200";
+                  if (n.status === "PENDING") badgeStyle = "bg-amber-50 text-amber-700 border-amber-200";
+                  if (n.status === "PROCESSING") badgeStyle = "bg-indigo-50 text-indigo-700 border-indigo-200 animate-pulse";
+                  if (n.status === "FAILED") badgeStyle = "bg-rose-50 text-rose-700 border-rose-200";
+
+                  return (
+                    <div
+                      key={n.id}
+                      className="text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-100 space-y-2"
                     >
-                      {n.status}
-                    </span>
-                  </div>
-                ))}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800">{n.type}</span>
+                          <span className="text-[11px] text-slate-500">
+                            &rarr; {n.recipientEmail || booking.guestEmail}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border ${badgeStyle}`}
+                          >
+                            {n.status}
+                          </span>
+
+                          {isFailed && (
+                            <button
+                              type="button"
+                              onClick={() => handleRetryNotification(n.id)}
+                              disabled={retryingId === n.id}
+                              className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-colors disabled:opacity-50"
+                            >
+                              {retryingId === n.id ? "Retrying..." : "Retry"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400">
+                        <span>Scheduled: {n.scheduledAt}</span>
+                        {n.sentAt && <span className="text-emerald-600 font-medium">Sent: {n.sentAt}</span>}
+                        {(n.attemptCount ?? 0) > 0 && (
+                          <span>Attempts: {n.attemptCount}</span>
+                        )}
+                        {n.providerMessageId && (
+                          <span className="font-mono text-[10px] text-slate-400">
+                            Msg ID: {n.providerMessageId.slice(0, 16)}...
+                          </span>
+                        )}
+                      </div>
+
+                      {n.lastError && (
+                        <div className="text-[11px] text-rose-600 bg-rose-50/50 p-2 rounded-lg border border-rose-100 font-mono">
+                          Error: {n.lastError}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

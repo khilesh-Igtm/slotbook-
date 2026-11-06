@@ -510,7 +510,7 @@ describe("Phase 4: Host Dashboard & Scheduling Management", () => {
         where: { bookingId: testBookingId, type: "CANCELLATION" },
       });
       assert.ok(cancellationNotif);
-      assert.equal(cancellationNotif.status, "SENT");
+      assert.equal(cancellationNotif.status, "PENDING");
 
       // Verify slot is immediately available again on 2026-12-14
       const { slots } = await getAvailableSlots({

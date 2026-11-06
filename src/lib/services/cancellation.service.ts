@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import { prisma } from "@/lib/prisma";
 import { BookingStatus, NotificationStatus, NotificationType } from "@prisma/client";
 import { CancelBookingInput } from "@/lib/validations/booking.schema";
+import { buildNotificationPayload } from "@/lib/notifications/notification.service";
 import {
   NotFoundError,
   UnauthorizedError,
@@ -83,25 +84,47 @@ export async function cancelBooking(
       },
     });
 
-    // B. Cancel any scheduled reminder notifications
+    // B. Cancel any pending or scheduled reminder notifications
     await tx.notification.updateMany({
       where: {
         bookingId: booking.id,
-        status: NotificationStatus.SCHEDULED,
+        type: NotificationType.REMINDER,
+        status: { in: [NotificationStatus.PENDING, NotificationStatus.SCHEDULED] },
       },
       data: {
         status: NotificationStatus.CANCELLED,
       },
     });
 
-    // C. Create CANCELLATION notification record
+    // C. Create CANCELLATION notification record (status: PENDING, processed by background worker)
+    const payload = buildNotificationPayload({
+      bookingId: booking.id,
+      guestName: updated.guestName,
+      guestEmail: updated.guestEmail,
+      hostName: updated.host.name,
+      hostEmail: updated.host.email,
+      hostSlug: updated.host.slug,
+      hostTimezone: updated.host.timezone,
+      eventTitle: updated.eventType.title,
+      eventSlug: updated.eventType.slug,
+      duration: updated.eventType.duration,
+      location: updated.eventType.location,
+      startAt: updated.startAt,
+      endAt: updated.endAt,
+      cancellationReason: updated.cancellationReason,
+      cancelledBy: "guest",
+    });
+
     await tx.notification.create({
       data: {
         bookingId: booking.id,
         type: NotificationType.CANCELLATION,
-        status: NotificationStatus.SENT,
+        status: NotificationStatus.PENDING,
+        recipientEmail: updated.guestEmail,
+        recipientType: "GUEST",
+        subject: `Cancelled: ${updated.eventType.title} with ${updated.host.name}`,
+        payload: payload as object,
         scheduledAt: now.toJSDate(),
-        sentAt: now.toJSDate(),
       },
     });
 

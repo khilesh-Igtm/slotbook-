@@ -4,6 +4,7 @@ import { BookingStatus, NotificationStatus, NotificationType } from "@prisma/cli
 import { CreateBookingInput } from "@/lib/validations/booking.schema";
 import { getHostAndEventType, getEffectiveWindows } from "@/lib/services/availability.service";
 import { hashPayload } from "@/lib/utils/time";
+import { buildNotificationPayload } from "@/lib/notifications/notification.service";
 import {
   SlotUnavailableError,
   SlotConflictError,
@@ -172,27 +173,55 @@ export async function createBooking(
           },
         });
 
-        // E. Create notification records transactionally
-        const reminderTarget = startAtUtc.minus({ hours: 24 });
-        const reminderScheduledAt = reminderTarget > now ? reminderTarget.toJSDate() : now.toJSDate();
+        // E. Create notification records transactionally (Phase 5: Background Worker Architecture)
+        const reminderLeadHours = parseInt(process.env.REMINDER_LEAD_HOURS || "24", 10);
+        const reminderTarget = startAtUtc.minus({ hours: reminderLeadHours });
 
-        await tx.notification.createMany({
-          data: [
-            {
-              bookingId: createdBooking.id,
-              type: NotificationType.CONFIRMATION,
-              status: NotificationStatus.SENT,
-              scheduledAt: now.toJSDate(),
-              sentAt: now.toJSDate(),
-            },
-            {
+        const payload = buildNotificationPayload({
+          bookingId: createdBooking.id,
+          guestName: createdBooking.guestName,
+          guestEmail: createdBooking.guestEmail,
+          hostName: createdBooking.host.name,
+          hostEmail: createdBooking.host.email,
+          hostSlug: createdBooking.host.slug,
+          hostTimezone: createdBooking.host.timezone,
+          eventTitle: createdBooking.eventType.title,
+          eventSlug: createdBooking.eventType.slug,
+          duration: createdBooking.eventType.duration,
+          location: createdBooking.eventType.location,
+          startAt: createdBooking.startAt,
+          endAt: createdBooking.endAt,
+        });
+
+        // 1. Booking Confirmation notification (Status: PENDING, scheduled immediately)
+        await tx.notification.create({
+          data: {
+            bookingId: createdBooking.id,
+            type: NotificationType.CONFIRMATION,
+            status: NotificationStatus.PENDING,
+            recipientEmail: createdBooking.guestEmail,
+            recipientType: "GUEST",
+            subject: `Confirmed: ${createdBooking.eventType.title} with ${createdBooking.host.name}`,
+            payload: payload as object,
+            scheduledAt: now.toJSDate(),
+          },
+        });
+
+        // 2. Booking Reminder notification (Scheduled only if appointment is far enough in the future)
+        if (reminderTarget > now) {
+          await tx.notification.create({
+            data: {
               bookingId: createdBooking.id,
               type: NotificationType.REMINDER,
               status: NotificationStatus.SCHEDULED,
-              scheduledAt: reminderScheduledAt,
+              recipientEmail: createdBooking.guestEmail,
+              recipientType: "GUEST",
+              subject: `Reminder: ${createdBooking.eventType.title} with ${createdBooking.host.name} is coming up`,
+              payload: payload as object,
+              scheduledAt: reminderTarget.toJSDate(),
             },
-          ],
-        });
+          });
+        }
 
         const formattedResponse: BookingResponse = {
           id: createdBooking.id,

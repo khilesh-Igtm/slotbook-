@@ -33,6 +33,7 @@ enum NotificationType {
 enum NotificationStatus {
   PENDING
   SCHEDULED
+  PROCESSING
   SENT
   FAILED
   CANCELLED
@@ -147,16 +148,28 @@ model IdempotencyKey {
 }
 
 model Notification {
-  id          String             @id @default(uuid())
-  bookingId   String
-  booking     Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  type        NotificationType
-  status      NotificationStatus @default(PENDING)
-  scheduledAt DateTime           @db.Timestamptz
-  sentAt      DateTime?          @db.Timestamptz
-  createdAt   DateTime           @default(now()) @db.Timestamptz
-  updatedAt   DateTime           @updatedAt @db.Timestamptz
+  id                String             @id @default(uuid())
+  bookingId         String
+  booking           Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type              NotificationType
+  status            NotificationStatus @default(PENDING)
+  recipientEmail    String?
+  recipientType     String             @default("GUEST")
+  subject           String?
+  payload           Json?
+  scheduledAt       DateTime           @db.Timestamptz
+  sentAt            DateTime?          @db.Timestamptz
+  attemptCount      Int                @default(0)
+  lastError         String?
+  nextAttemptAt     DateTime?          @db.Timestamptz
+  lockedAt          DateTime?          @db.Timestamptz
+  providerMessageId String?
+  createdAt         DateTime           @default(now()) @db.Timestamptz
+  updatedAt         DateTime           @updatedAt @db.Timestamptz
 
+  @@unique([bookingId, type, recipientType])
   @@index([bookingId])
   @@index([status, scheduledAt])
+  @@index([status, nextAttemptAt])
+  @@index([lockedAt])
 }

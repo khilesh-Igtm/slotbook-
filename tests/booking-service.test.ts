@@ -94,7 +94,7 @@ describe("Booking Service & Cancellation", () => {
     const reminder = notifications.find((n) => n.type === NotificationType.REMINDER);
 
     assert.ok(confirmation);
-    assert.equal(confirmation.status, NotificationStatus.SENT);
+    assert.equal(confirmation.status, NotificationStatus.PENDING);
     assert.ok(reminder);
     assert.equal(reminder.status, NotificationStatus.SCHEDULED);
 
@@ -205,7 +205,7 @@ describe("Booking Service & Cancellation", () => {
       where: { bookingId: booking.id, type: NotificationType.CANCELLATION },
     });
     assert.ok(cancellationNotif);
-    assert.equal(cancellationNotif.status, NotificationStatus.SENT);
+    assert.equal(cancellationNotif.status, NotificationStatus.PENDING);
 
     // 3. Confirm slot is released: Another guest can now book the exact same slot!
     const { booking: rebooked } = await createBooking(
