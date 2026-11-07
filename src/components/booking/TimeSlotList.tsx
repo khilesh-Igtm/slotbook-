@@ -1,9 +1,20 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { DateTime } from "luxon";
 import { AvailableSlot } from "@/lib/services/availability.service";
-import { ClockIcon, SpinnerIcon } from "./Icons";
+import { ClockIcon, GlobeIcon, SpinnerIcon } from "./Icons";
+
+const TIMEZONE_OPTIONS = [
+  "Asia/Kolkata",
+  "America/New_York",
+  "America/Los_Angeles",
+  "America/Chicago",
+  "Europe/London",
+  "Europe/Paris",
+  "Asia/Tokyo",
+  "UTC",
+];
 
 export interface TimeSlotListProps {
   selectedDate: string;
@@ -24,16 +35,38 @@ export function TimeSlotList({
   onProceedToDetails,
   timezone,
 }: TimeSlotListProps) {
-  const dateObj = DateTime.fromISO(selectedDate, { zone: timezone });
+  const [guestZone, setGuestZone] = useState<string>(timezone);
+
+  const dateObj = DateTime.fromISO(selectedDate, { zone: guestZone });
   const formattedDate = dateObj.isValid ? dateObj.toFormat("EEEE, MMMM d") : selectedDate;
+
+  // Ensure host timezone is always included in the dropdown options
+  const availableTimezones = Array.from(new Set([timezone, ...TIMEZONE_OPTIONS]));
 
   return (
     <div className="flex flex-col h-full">
-      {/* Date Header */}
-      <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
+      {/* Date Header & Timezone Selector */}
+      <div className="pb-3 border-b border-slate-100 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-slate-900">{formattedDate}</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Times shown in {timezone}</p>
+          <p className="text-xs text-slate-500 mt-0.5">Times shown in {guestZone}</p>
+        </div>
+
+        {/* Guest Timezone Selector */}
+        <div className="flex items-center gap-1.5 self-start sm:self-auto">
+          <GlobeIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <select
+            value={guestZone}
+            onChange={(e) => setGuestZone(e.target.value)}
+            className="text-xs text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+            title="Change display timezone"
+          >
+            {availableTimezones.map((tz) => (
+              <option key={tz} value={tz}>
+                {tz} {tz === timezone ? "(Host)" : ""}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -58,6 +91,8 @@ export function TimeSlotList({
           <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
             {slots.map((slot) => {
               const isSelected = selectedSlot?.startAt === slot.startAt;
+              // Format slot boundary according to the selected display timezone
+              const displayStart = DateTime.fromISO(slot.startAt).setZone(guestZone).toFormat("HH:mm");
 
               if (isSelected) {
                 return (
@@ -66,7 +101,7 @@ export function TimeSlotList({
                       type="button"
                       className="py-2.5 px-3 rounded-lg border-2 border-indigo-600 bg-indigo-50/50 text-indigo-700 font-semibold text-sm text-center shadow-xs"
                     >
-                      {slot.localStart}
+                      {displayStart}
                     </button>
                     <button
                       type="button"
@@ -86,7 +121,7 @@ export function TimeSlotList({
                   onClick={() => onSelectSlot(slot)}
                   className="w-full py-2.5 px-4 rounded-lg border border-slate-200 bg-white hover:border-indigo-600 hover:text-indigo-600 font-medium text-sm text-slate-700 transition-all text-center focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 >
-                  {slot.localStart}
+                  {displayStart}
                 </button>
               );
             })}
