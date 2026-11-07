@@ -55,6 +55,9 @@ describe("PostgreSQL Concurrency & GiST Exclusion Integration", () => {
   });
 
   after(async () => {
+    await prisma.notification.deleteMany();
+    await prisma.idempotencyKey.deleteMany();
+    await prisma.booking.deleteMany();
     await prisma.availability.deleteMany({ where: { hostId: secondHostId } });
     await prisma.eventType.deleteMany({ where: { hostId: secondHostId } });
     await prisma.host.delete({ where: { id: secondHostId } });

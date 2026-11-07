@@ -81,6 +81,8 @@ describe("Phase 5: Email Notifications & Background Job Processing", () => {
     await prisma.notification.deleteMany({ where: { booking: { hostId: secondaryHostId } } });
     await prisma.booking.deleteMany({ where: { hostId: secondaryHostId } });
     await prisma.host.deleteMany({ where: { id: secondaryHostId } });
+    await prisma.notification.deleteMany({ where: { booking: { guestEmail: { in: ["notif.tester@example.com", "notif.close@example.com", "notif.cancel@example.com"] } } } });
+    await prisma.booking.deleteMany({ where: { guestEmail: { in: ["notif.tester@example.com", "notif.close@example.com", "notif.cancel@example.com"] } } });
     await prisma.$disconnect();
   });
 

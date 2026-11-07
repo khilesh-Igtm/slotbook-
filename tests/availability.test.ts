@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { DateTime } from "luxon";
 import { prisma } from "../src/lib/prisma";
 import { getAvailableSlots } from "../src/lib/services/availability.service";
+import { updateHostWeeklyAvailability } from "../src/lib/services/host-availability.service";
 import { BookingStatus, DayOfWeek } from "@prisma/client";
 
 describe("Availability Engine & Slot Generation", () => {
@@ -26,9 +27,41 @@ describe("Availability Engine & Slot Generation", () => {
 
     meeting30Id = m30.id;
     consultation60Id = c60.id;
+
+    // Ensure clean hermetic test state: restore standard Monday-Friday 09:00-17:00 schedule
+    await updateHostWeeklyAvailability(demoHostId, {
+      schedules: [
+        { dayOfWeek: DayOfWeek.MONDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.TUESDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.WEDNESDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.THURSDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.FRIDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.SATURDAY, isEnabled: false, windows: [] },
+        { dayOfWeek: DayOfWeek.SUNDAY, isEnabled: false, windows: [] },
+      ],
+    });
+
+    // Remove any non-seed date overrides for November 2026 test dates
+    await prisma.dateOverride.deleteMany({
+      where: {
+        hostId: demoHostId,
+        date: {
+          gte: new Date("2026-11-01T00:00:00.000Z"),
+          lte: new Date("2026-11-30T23:59:59.999Z"),
+        },
+      },
+    });
+
+    // Clean up residual bookings
+    await prisma.notification.deleteMany();
+    await prisma.idempotencyKey.deleteMany();
+    await prisma.booking.deleteMany({ where: { hostId: demoHostId } });
   });
 
   after(async () => {
+    await prisma.notification.deleteMany();
+    await prisma.idempotencyKey.deleteMany();
+    await prisma.booking.deleteMany({ where: { hostId: demoHostId } });
     await prisma.$disconnect();
   });
 

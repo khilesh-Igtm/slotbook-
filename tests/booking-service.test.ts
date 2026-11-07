@@ -4,7 +4,8 @@ import { DateTime } from "luxon";
 import { prisma } from "../src/lib/prisma";
 import { createBooking, getBookingById } from "../src/lib/services/booking.service";
 import { cancelBooking } from "../src/lib/services/cancellation.service";
-import { BookingStatus, NotificationStatus, NotificationType } from "@prisma/client";
+import { updateHostWeeklyAvailability } from "../src/lib/services/host-availability.service";
+import { BookingStatus, DayOfWeek, NotificationStatus, NotificationType } from "@prisma/client";
 import {
   SlotUnavailableError,
   ValidationError,
@@ -28,6 +29,30 @@ describe("Booking Service & Cancellation", () => {
     assert.ok(m30);
     meeting30Id = m30.id;
 
+    // Ensure clean hermetic test state: restore standard Monday-Friday 09:00-17:00 schedule
+    await updateHostWeeklyAvailability(demoHostId, {
+      schedules: [
+        { dayOfWeek: DayOfWeek.MONDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.TUESDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.WEDNESDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.THURSDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.FRIDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.SATURDAY, isEnabled: false, windows: [] },
+        { dayOfWeek: DayOfWeek.SUNDAY, isEnabled: false, windows: [] },
+      ],
+    });
+
+    // Remove any non-seed date overrides for November 2026 test dates
+    await prisma.dateOverride.deleteMany({
+      where: {
+        hostId: demoHostId,
+        date: {
+          gte: new Date("2026-11-01T00:00:00.000Z"),
+          lte: new Date("2026-11-30T23:59:59.999Z"),
+        },
+      },
+    });
+
     // Create an inactive event type to test validation
     const inactive = await prisma.eventType.create({
       data: {
@@ -42,6 +67,9 @@ describe("Booking Service & Cancellation", () => {
   });
 
   after(async () => {
+    await prisma.notification.deleteMany();
+    await prisma.idempotencyKey.deleteMany();
+    await prisma.booking.deleteMany({ where: { hostId: demoHostId } });
     await prisma.eventType.delete({ where: { id: inactiveEventId } });
     await prisma.$disconnect();
   });

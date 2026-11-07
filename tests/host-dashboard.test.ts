@@ -267,16 +267,34 @@ describe("Phase 4: Host Dashboard & Scheduling Management", () => {
     });
 
     it("archives (deactivates) event type instead of deleting when bookings exist", async () => {
-      // 30-min meeting has bookings; deleting it should archive it
-      const res = await deleteOrArchiveEventTypeForHost(primaryHostId, meeting30Id);
-      assert.equal(res.action, "archived");
-      assert.equal(res.eventType?.isActive, false);
-
-      // Restore active status
-      await prisma.eventType.update({
-        where: { id: meeting30Id },
-        data: { isActive: true },
+      // Create a temporary booking for meeting30Id to guarantee that deleteOrArchive executes the archive path
+      const tempBooking = await prisma.booking.create({
+        data: {
+          hostId: primaryHostId,
+          eventTypeId: meeting30Id,
+          guestName: "Archive Guard Attendee",
+          guestEmail: "archive.guard@example.com",
+          startAt: new Date("2026-12-28T04:30:00.000Z"),
+          endAt: new Date("2026-12-28T05:00:00.000Z"),
+          reservedStartAt: new Date("2026-12-28T04:25:00.000Z"),
+          reservedEndAt: new Date("2026-12-28T05:05:00.000Z"),
+          status: BookingStatus.CONFIRMED,
+        },
       });
+
+      try {
+        const res = await deleteOrArchiveEventTypeForHost(primaryHostId, meeting30Id);
+        assert.equal(res.action, "archived");
+        assert.equal(res.eventType?.isActive, false);
+
+        // Restore active status
+        await prisma.eventType.update({
+          where: { id: meeting30Id },
+          data: { isActive: true },
+        });
+      } finally {
+        await prisma.booking.delete({ where: { id: tempBooking.id } });
+      }
     });
   });
 

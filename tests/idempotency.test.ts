@@ -21,6 +21,9 @@ describe("Idempotency Service", () => {
   });
 
   after(async () => {
+    await prisma.notification.deleteMany();
+    await prisma.idempotencyKey.deleteMany();
+    await prisma.booking.deleteMany();
     await prisma.$disconnect();
   });
 

@@ -2,6 +2,8 @@ import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { prisma } from "../src/lib/prisma";
+import { updateHostWeeklyAvailability } from "../src/lib/services/host-availability.service";
+import { DayOfWeek } from "@prisma/client";
 import { GET as getEventTypes } from "../src/app/api/hosts/[hostId]/event-types/route";
 import { GET as getAvailability } from "../src/app/api/hosts/[hostId]/event-types/[eventTypeId]/availability/route";
 import { POST as createBookingRoute } from "../src/app/api/bookings/route";
@@ -21,9 +23,36 @@ describe("API Routes Integration", () => {
     const m30 = host.eventTypes.find((e) => e.slug === "30-min-meeting");
     assert.ok(m30);
     meeting30Id = m30.id;
+
+    // Ensure clean hermetic test state: restore standard Monday-Friday 09:00-17:00 schedule
+    await updateHostWeeklyAvailability(demoHostId, {
+      schedules: [
+        { dayOfWeek: DayOfWeek.MONDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.TUESDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.WEDNESDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.THURSDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.FRIDAY, isEnabled: true, windows: [{ startTime: "09:00", endTime: "17:00" }] },
+        { dayOfWeek: DayOfWeek.SATURDAY, isEnabled: false, windows: [] },
+        { dayOfWeek: DayOfWeek.SUNDAY, isEnabled: false, windows: [] },
+      ],
+    });
+
+    // Remove any non-seed date overrides for November 2026 test dates
+    await prisma.dateOverride.deleteMany({
+      where: {
+        hostId: demoHostId,
+        date: {
+          gte: new Date("2026-11-01T00:00:00.000Z"),
+          lte: new Date("2026-11-30T23:59:59.999Z"),
+        },
+      },
+    });
   });
 
   after(async () => {
+    await prisma.notification.deleteMany();
+    await prisma.idempotencyKey.deleteMany();
+    await prisma.booking.deleteMany();
     await prisma.$disconnect();
   });
 
